@@ -103,11 +103,11 @@ class SchemaIT extends AbstractIntegrationTest {
                 .findFirst()
                 .orElseThrow();
 
-        // Uid, Name, protocol, redirectUris, name, description, adminUrl, secret,
-        // clientAuthenticatorType, publicClient, standardFlowEnabled, implicitFlowEnabled,
-        // directAccessGrantsEnabled, serviceAccountsEnabled, bearerOnly, baseUrl, rootUrl,
-        // origin, webOrigins, authorizationServicesEnabled, __ENABLE__, attributes = 22
-        assertEquals(22, clientInfo.getAttributeInfo().size());
+        // Uid, Name, protocol, redirectUris, name, description, adminUrl, defaultClientScopes,
+        // secret, clientAuthenticatorType, publicClient, standardFlowEnabled, implicitFlowEnabled,
+        // directAccessGrantsEnabled, serviceAccountsEnabled, bearerOnly, baseUrl, rootUrl, origin,
+        // webOrigins, authorizationServicesEnabled, __ENABLE__, attributes = 23
+        assertEquals(23, clientInfo.getAttributeInfo().size());
     }
 
     @Test

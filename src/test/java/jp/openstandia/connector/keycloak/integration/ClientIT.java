@@ -17,6 +17,7 @@ package jp.openstandia.connector.keycloak.integration;
 
 import jp.openstandia.connector.keycloak.KeycloakClientHandler;
 import org.identityconnectors.common.security.GuardedString;
+import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.objects.*;
 import org.identityconnectors.framework.common.objects.filter.FilterBuilder;
 import org.junit.jupiter.api.Test;
@@ -70,6 +71,25 @@ class ClientIT extends AbstractIntegrationTest {
         assertEquals("client-jwt", singleAttr(result, "clientAuthenticatorType"));
     }
 
+    @Test
+    void addClientWithDefaultClientScopes() {
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(new Name("test-client"));
+        attrs.add(AttributeBuilder.build("protocol", "openid-connect"));
+        attrs.add(AttributeBuilder.build("defaultClientScopes", list("phone", "address")));
+        attrs.add(AttributeBuilder.buildEnabled(true));
+
+        Uid uid = connector.create(CLIENT_OBJECT_CLASS, attrs, new OperationOptionsBuilder().build());
+
+        ConnectorObject result = connector.getObject(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name("test-client")),
+                defaultGetOperation("defaultClientScopes"));
+
+        List<Object> scopes = multiAttr(result, "defaultClientScopes");
+        assertTrue(scopes.contains("phone"));
+        assertTrue(scopes.contains("address"));
+    }
+
     // --- Update ---
 
     @Test
@@ -87,6 +107,67 @@ class ClientIT extends AbstractIntegrationTest {
                 defaultGetOperation("clientAuthenticatorType"));
 
         assertEquals("client-jwt", singleAttr(result, "clientAuthenticatorType"));
+    }
+
+    @Test
+    void updateClientDefaultClientScopesAdd() {
+        Uid uid = createTestClient("test-client", list("profile"));
+
+        Set<AttributeDelta> modifications = new HashSet<>();
+        modifications.add(AttributeDeltaBuilder.build("defaultClientScopes", list("email"), null));
+
+        connector.updateDelta(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name("test-client")), modifications, new OperationOptionsBuilder().build());
+
+        List<Object> scopes = defaultClientScopesOf(uid);
+        assertTrue(scopes.contains("profile"), "Existing scope should be preserved");
+        assertTrue(scopes.contains("email"), "New scope should be added");
+    }
+
+    @Test
+    void updateClientDefaultClientScopesRemove() {
+        Uid uid = createTestClient("test-client", list("phone", "address"));
+
+        Set<AttributeDelta> modifications = new HashSet<>();
+        modifications.add(AttributeDeltaBuilder.build("defaultClientScopes", null, list("phone")));
+
+        connector.updateDelta(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name("test-client")), modifications, new OperationOptionsBuilder().build());
+
+        List<Object> scopes = defaultClientScopesOf(uid);
+        assertFalse(scopes.contains("phone"), "Removed scope should be gone");
+        assertTrue(scopes.contains("address"), "Remaining scope should be preserved");
+    }
+
+    @Test
+    void updateClientDefaultClientScopesReplace() {
+        Uid uid = createTestClient("test-client", list("phone", "address"));
+
+        Set<AttributeDelta> modifications = new HashSet<>();
+        modifications.add(AttributeDeltaBuilder.build("defaultClientScopes", list("profile", "email")));
+
+        connector.updateDelta(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name("test-client")), modifications, new OperationOptionsBuilder().build());
+
+        List<Object> scopes = defaultClientScopesOf(uid);
+        assertEquals(set("profile", "email"), asSet(scopes));
+    }
+
+    @Test
+    void updateClientDefaultClientScopesUnknownName() {
+        Uid uid = createTestClient("test-client", list("profile"));
+
+        Set<AttributeDelta> modifications = new HashSet<>();
+        modifications.add(AttributeDeltaBuilder.build("defaultClientScopes", list("email"), list("no-such-scope")));
+
+        InvalidAttributeValueException e = assertThrows(InvalidAttributeValueException.class, () -> {
+            connector.updateDelta(CLIENT_OBJECT_CLASS,
+                    new Uid(uid.getUidValue(), new Name("test-client")), modifications, new OperationOptionsBuilder().build());
+        });
+        assertTrue(e.getMessage().contains("no-such-scope"), "The message should name the unknown scope: " + e.getMessage());
+
+        List<Object> scopes = defaultClientScopesOf(uid);
+        assertEquals(set("profile"), asSet(scopes), "The refused update should not change any scope");
     }
 
     // --- Read ---
@@ -217,5 +298,21 @@ class ClientIT extends AbstractIntegrationTest {
         attrs.add(AttributeBuilder.build("protocol", "openid-connect"));
         attrs.add(AttributeBuilder.buildEnabled(true));
         return connector.create(CLIENT_OBJECT_CLASS, attrs, new OperationOptionsBuilder().build());
+    }
+
+    private Uid createTestClient(String clientId, List<String> defaultClientScopes) {
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(new Name(clientId));
+        attrs.add(AttributeBuilder.build("protocol", "openid-connect"));
+        attrs.add(AttributeBuilder.build("defaultClientScopes", defaultClientScopes));
+        attrs.add(AttributeBuilder.buildEnabled(true));
+        return connector.create(CLIENT_OBJECT_CLASS, attrs, new OperationOptionsBuilder().build());
+    }
+
+    private List<Object> defaultClientScopesOf(Uid uid) {
+        ConnectorObject result = connector.getObject(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name(uid.getNameHintValue())),
+                defaultGetOperation("defaultClientScopes"));
+        return multiAttr(result, "defaultClientScopes");
     }
 }

@@ -48,6 +48,7 @@ public class KeycloakClientHandler extends AbstractKeycloakHandler {
     public static final String ATTR_NAME = "name";
     public static final String ATTR_DESCRIPTION = "description";
     public static final String ATTR_ADMIN_URL = "adminUrl";
+    public static final String ATTR_DEFAULT_CLIENT_SCOPES = "defaultClientScopes";
 
     // openid-connect
     public static final String ATTR_SECRET = "secret";
@@ -115,6 +116,10 @@ public class KeycloakClientHandler extends AbstractKeycloakHandler {
                 .build());
         builder.addAttributeInfo(AttributeInfoBuilder.define(ATTR_ADMIN_URL)
                 .setRequired(false)
+                .build());
+        builder.addAttributeInfo(AttributeInfoBuilder.define(ATTR_DEFAULT_CLIENT_SCOPES)
+                .setRequired(false)
+                .setMultiValued(true)
                 .build());
 
         // openid-connect

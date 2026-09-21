@@ -30,6 +30,7 @@ import org.keycloak.admin.client.resource.ClientResource;
 import org.keycloak.admin.client.resource.ClientsResource;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.representations.idm.ClientScopeRepresentation;
 
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
@@ -103,6 +104,9 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
 
             } else if (attr.getName().equals(ATTR_ADMIN_URL)) {
                 newClient.setAdminUrl(AttributeUtil.getStringValue(attr));
+
+            } else if (attr.getName().equals(ATTR_DEFAULT_CLIENT_SCOPES)) {
+                newClient.setDefaultClientScopes(attr.getValue().stream().map(Object::toString).collect(Collectors.toList()));
 
 // openid-connect
             } else if (attr.getName().equals(ATTR_SECRET)) {
@@ -190,6 +194,8 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
     public void updateClient(KeycloakSchema schema, String realmName, Uid uid, Set<AttributeDelta> modifications, OperationOptions options) throws UnknownUidException {
         ClientsResource resource = clients(realmName);
         ClientRepresentation current;
+        List<String> addDefaultClientScopes = new ArrayList<>();
+        List<String> removeDefaultClientScopes = new ArrayList<>();
 
         try {
             ClientResource client = resource.get(uid.getUidValue());
@@ -220,6 +226,37 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
 
                 } else if (delta.getName().equals(ATTR_ADMIN_URL)) {
                     current.setAdminUrl(AttributeDeltaUtil.getStringValue(delta));
+
+                } else if (delta.getName().equals(ATTR_DEFAULT_CLIENT_SCOPES)) {
+                    // Keycloak ignores defaultClientScopes in the client update API.
+                    // The scopes are applied with the dedicated endpoints after the update below.
+                    if (delta.getValuesToReplace() != null) {
+                        List<String> newScopes = delta.getValuesToReplace().stream().map(Object::toString).collect(Collectors.toList());
+                        List<String> currentScopes = client.getDefaultClientScopes().stream()
+                                .map(ClientScopeRepresentation::getName).collect(Collectors.toList());
+
+                        for (String scopeName : newScopes) {
+                            if (!currentScopes.contains(scopeName)) {
+                                addDefaultClientScopes.add(scopeName);
+                            }
+                        }
+                        for (String scopeName : currentScopes) {
+                            if (!newScopes.contains(scopeName)) {
+                                removeDefaultClientScopes.add(scopeName);
+                            }
+                        }
+                    } else {
+                        if (delta.getValuesToAdd() != null) {
+                            for (Object v : delta.getValuesToAdd()) {
+                                addDefaultClientScopes.add(v.toString());
+                            }
+                        }
+                        if (delta.getValuesToRemove() != null) {
+                            for (Object v : delta.getValuesToRemove()) {
+                                removeDefaultClientScopes.add(v.toString());
+                            }
+                        }
+                    }
 
 // openid-connect
                 } else if (delta.getName().equals(ATTR_SECRET)) {
@@ -331,6 +368,47 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
             throw new UnknownUidException(uid, CLIENT_OBJECT_CLASS);
         }
 
+        // We need to call another API to add/remove the default client scopes for this client.
+        // It means that we can't execute this operation as a single transaction.
+        updateDefaultClientScopes(realmName, uid.getUidValue(), addDefaultClientScopes, removeDefaultClientScopes);
+    }
+
+    private void updateDefaultClientScopes(String realmName, String clientUUID, List<String> addScopeNames, List<String> removeScopeNames) {
+        if (addScopeNames.isEmpty() && removeScopeNames.isEmpty()) {
+            return;
+        }
+
+        Map<String, String> scopeIds = new HashMap<>();
+        for (ClientScopeRepresentation scope : realm(realmName).clientScopes().findAll()) {
+            scopeIds.put(scope.getName(), scope.getId());
+        }
+
+        // Resolve every name before calling the API so that an unknown name doesn't leave a partial update
+        List<String> removeIds = toClientScopeIds(scopeIds, removeScopeNames);
+        List<String> addIds = toClientScopeIds(scopeIds, addScopeNames);
+
+        ClientResource client = clients(realmName).get(clientUUID);
+        for (String scopeId : removeIds) {
+            client.removeDefaultClientScope(scopeId);
+        }
+        for (String scopeId : addIds) {
+            client.addDefaultClientScope(scopeId);
+        }
+    }
+
+    private List<String> toClientScopeIds(Map<String, String> scopeIds, List<String> scopeNames) {
+        List<String> ids = new ArrayList<>();
+        for (String scopeName : scopeNames) {
+            String scopeId = scopeIds.get(scopeName);
+            if (scopeId == null) {
+                InvalidAttributeValueException exception = new InvalidAttributeValueException(
+                        String.format("Not found the client scope '%s' in the keycloak realm", scopeName));
+                exception.setAffectedAttributeNames(Arrays.asList(ATTR_DEFAULT_CLIENT_SCOPES));
+                throw exception;
+            }
+            ids.add(scopeId);
+        }
+        return ids;
     }
 
     @Override
@@ -453,6 +531,9 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
         }
         if (shouldReturn(attributesToGet, ATTR_ADMIN_URL)) {
             builder.addAttribute(ATTR_ADMIN_URL, rep.getAdminUrl());
+        }
+        if (shouldReturn(attributesToGet, ATTR_DEFAULT_CLIENT_SCOPES)) {
+            builder.addAttribute(ATTR_DEFAULT_CLIENT_SCOPES, rep.getDefaultClientScopes());
         }
 
         // openid-connect
