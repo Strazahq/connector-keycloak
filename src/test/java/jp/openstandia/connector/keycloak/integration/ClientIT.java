@@ -53,6 +53,42 @@ class ClientIT extends AbstractIntegrationTest {
         assertEquals("openid-connect", singleAttr(result, "protocol"));
     }
 
+    @Test
+    void addClientWithClientAuthenticatorType() {
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(new Name("test-client"));
+        attrs.add(AttributeBuilder.build("protocol", "openid-connect"));
+        attrs.add(AttributeBuilder.build("clientAuthenticatorType", "client-jwt"));
+        attrs.add(AttributeBuilder.buildEnabled(true));
+
+        Uid uid = connector.create(CLIENT_OBJECT_CLASS, attrs, new OperationOptionsBuilder().build());
+
+        ConnectorObject result = connector.getObject(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name("test-client")),
+                defaultGetOperation("clientAuthenticatorType"));
+
+        assertEquals("client-jwt", singleAttr(result, "clientAuthenticatorType"));
+    }
+
+    // --- Update ---
+
+    @Test
+    void updateClientAuthenticatorType() {
+        Uid uid = createTestClient("test-client");
+
+        Set<AttributeDelta> modifications = new HashSet<>();
+        modifications.add(AttributeDeltaBuilder.build("clientAuthenticatorType", "client-jwt"));
+
+        connector.updateDelta(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name("test-client")), modifications, new OperationOptionsBuilder().build());
+
+        ConnectorObject result = connector.getObject(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name("test-client")),
+                defaultGetOperation("clientAuthenticatorType"));
+
+        assertEquals("client-jwt", singleAttr(result, "clientAuthenticatorType"));
+    }
+
     // --- Read ---
 
     @Test

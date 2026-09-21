@@ -112,6 +112,9 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
                     newClient.setSecret(clearPassword);
                 });
 
+            } else if (attr.getName().equals(ATTR_CLIENT_AUTHENTICATOR_TYPE)) {
+                newClient.setClientAuthenticatorType(AttributeUtil.getStringValue(attr));
+
             } else if (attr.getName().equals(ATTR_PUBLIC_CLIENT)) {
                 newClient.setPublicClient(AttributeUtil.getBooleanValue(attr));
 
@@ -225,6 +228,9 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
                         String clearPassword = String.valueOf(a);
                         current.setSecret(clearPassword);
                     });
+
+                } else if (delta.getName().equals(ATTR_CLIENT_AUTHENTICATOR_TYPE)) {
+                    current.setClientAuthenticatorType(AttributeDeltaUtil.getStringValue(delta));
 
                 } else if (delta.getName().equals(ATTR_PUBLIC_CLIENT)) {
                     current.setPublicClient(AttributeDeltaUtil.getBooleanValue(delta));
@@ -457,6 +463,9 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
                 builder.addAttribute(ATTR_SECRET, rep.getSecret());
             }
 
+        }
+        if (shouldReturn(attributesToGet, ATTR_CLIENT_AUTHENTICATOR_TYPE)) {
+            builder.addAttribute(ATTR_CLIENT_AUTHENTICATOR_TYPE, rep.getClientAuthenticatorType());
         }
         if (shouldReturn(attributesToGet, ATTR_PUBLIC_CLIENT)) {
             builder.addAttribute(ATTR_PUBLIC_CLIENT, rep.isPublicClient());

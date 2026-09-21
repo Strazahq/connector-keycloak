@@ -51,6 +51,7 @@ public class KeycloakClientHandler extends AbstractKeycloakHandler {
 
     // openid-connect
     public static final String ATTR_SECRET = "secret";
+    public static final String ATTR_CLIENT_AUTHENTICATOR_TYPE = "clientAuthenticatorType";
     public static final String ATTR_PUBLIC_CLIENT = "publicClient";
     public static final String ATTR_STANDARD_FLOW_ENABLED = "standardFlowEnabled";
     public static final String ATTR_IMPLICIT_FLOW_ENABLED = "implicitFlowEnabled";
@@ -120,6 +121,9 @@ public class KeycloakClientHandler extends AbstractKeycloakHandler {
         builder.addAttributeInfo(AttributeInfoBuilder.define(ATTR_SECRET)
                 .setRequired(false)
                 .setType(GuardedString.class)
+                .build());
+        builder.addAttributeInfo(AttributeInfoBuilder.define(ATTR_CLIENT_AUTHENTICATOR_TYPE)
+                .setRequired(false)
                 .build());
         builder.addAttributeInfo(AttributeInfoBuilder.define(ATTR_PUBLIC_CLIENT)
                 .setRequired(false)
