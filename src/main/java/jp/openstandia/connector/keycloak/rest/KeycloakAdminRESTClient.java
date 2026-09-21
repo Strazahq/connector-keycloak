@@ -73,6 +73,11 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
     public Uid createClient(KeycloakSchema schema, String realmName, Set<Attribute> createAttributes) throws AlreadyExistsException {
         ClientRepresentation rep = toClientRep(schema, createAttributes);
 
+        if (rep.getDefaultClientScopes() != null) {
+            // Keycloak ignores an unknown client scope silently when creating the client
+            toClientScopeIds(getClientScopeIds(realmName), rep.getDefaultClientScopes());
+        }
+
         Response res = clients(realmName).create(rep);
 
         String uuid = checkCreateResult(res, "createClient");
@@ -196,6 +201,8 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
         ClientRepresentation current;
         List<String> addDefaultClientScopes = new ArrayList<>();
         List<String> removeDefaultClientScopes = new ArrayList<>();
+        List<String> addDefaultClientScopeIds = new ArrayList<>();
+        List<String> removeDefaultClientScopeIds = new ArrayList<>();
 
         try {
             ClientResource client = resource.get(uid.getUidValue());
@@ -359,6 +366,13 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
                 }
             }
 
+            // Resolve every name before the update so that an unknown name doesn't leave a partial update
+            if (!addDefaultClientScopes.isEmpty() || !removeDefaultClientScopes.isEmpty()) {
+                Map<String, String> scopeIds = getClientScopeIds(realmName);
+                removeDefaultClientScopeIds = toClientScopeIds(scopeIds, removeDefaultClientScopes);
+                addDefaultClientScopeIds = toClientScopeIds(scopeIds, addDefaultClientScopes);
+            }
+
             // TODO Optimize update if no diff
             client.update(current);
 
@@ -370,30 +384,21 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
 
         // We need to call another API to add/remove the default client scopes for this client.
         // It means that we can't execute this operation as a single transaction.
-        updateDefaultClientScopes(realmName, uid.getUidValue(), addDefaultClientScopes, removeDefaultClientScopes);
+        ClientResource client = resource.get(uid.getUidValue());
+        for (String scopeId : removeDefaultClientScopeIds) {
+            client.removeDefaultClientScope(scopeId);
+        }
+        for (String scopeId : addDefaultClientScopeIds) {
+            client.addDefaultClientScope(scopeId);
+        }
     }
 
-    private void updateDefaultClientScopes(String realmName, String clientUUID, List<String> addScopeNames, List<String> removeScopeNames) {
-        if (addScopeNames.isEmpty() && removeScopeNames.isEmpty()) {
-            return;
-        }
-
+    private Map<String, String> getClientScopeIds(String realmName) {
         Map<String, String> scopeIds = new HashMap<>();
         for (ClientScopeRepresentation scope : realm(realmName).clientScopes().findAll()) {
             scopeIds.put(scope.getName(), scope.getId());
         }
-
-        // Resolve every name before calling the API so that an unknown name doesn't leave a partial update
-        List<String> removeIds = toClientScopeIds(scopeIds, removeScopeNames);
-        List<String> addIds = toClientScopeIds(scopeIds, addScopeNames);
-
-        ClientResource client = clients(realmName).get(clientUUID);
-        for (String scopeId : removeIds) {
-            client.removeDefaultClientScope(scopeId);
-        }
-        for (String scopeId : addIds) {
-            client.addDefaultClientScope(scopeId);
-        }
+        return scopeIds;
     }
 
     private List<String> toClientScopeIds(Map<String, String> scopeIds, List<String> scopeNames) {

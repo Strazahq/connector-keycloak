@@ -90,6 +90,29 @@ class ClientIT extends AbstractIntegrationTest {
         assertTrue(scopes.contains("address"));
     }
 
+    @Test
+    void addClientWithUnknownDefaultClientScope() {
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(new Name("test-client"));
+        attrs.add(AttributeBuilder.build("protocol", "openid-connect"));
+        attrs.add(AttributeBuilder.build("defaultClientScopes", list("profile", "no-such-scope")));
+        attrs.add(AttributeBuilder.buildEnabled(true));
+
+        InvalidAttributeValueException e = assertThrows(InvalidAttributeValueException.class, () -> {
+            connector.create(CLIENT_OBJECT_CLASS, attrs, new OperationOptionsBuilder().build());
+        });
+        assertTrue(e.getMessage().contains("no-such-scope"), "The message should name the unknown scope: " + e.getMessage());
+
+        List<ConnectorObject> results = new ArrayList<>();
+        ResultsHandler handler = connectorObject -> {
+            results.add(connectorObject);
+            return true;
+        };
+        connector.search(CLIENT_OBJECT_CLASS, FilterBuilder.equalTo(new Name("test-client")), handler, defaultSearchOperation());
+
+        assertEquals(0, results.size(), "The refused client should not be created");
+    }
+
     // --- Update ---
 
     @Test
@@ -159,6 +182,7 @@ class ClientIT extends AbstractIntegrationTest {
 
         Set<AttributeDelta> modifications = new HashSet<>();
         modifications.add(AttributeDeltaBuilder.build("defaultClientScopes", list("email"), list("no-such-scope")));
+        modifications.add(AttributeDeltaBuilder.build("description", "changed"));
 
         InvalidAttributeValueException e = assertThrows(InvalidAttributeValueException.class, () -> {
             connector.updateDelta(CLIENT_OBJECT_CLASS,
@@ -168,6 +192,10 @@ class ClientIT extends AbstractIntegrationTest {
 
         List<Object> scopes = defaultClientScopesOf(uid);
         assertEquals(set("profile"), asSet(scopes), "The refused update should not change any scope");
+
+        ConnectorObject result = connector.getObject(CLIENT_OBJECT_CLASS,
+                new Uid(uid.getUidValue(), new Name("test-client")), defaultGetOperation("description"));
+        assertNull(singleAttr(result, "description"), "The refused update should not change any attribute");
     }
 
     // --- Read ---
